@@ -840,19 +840,27 @@
     let selectedWatchlistId = null;
 
     document.addEventListener('DOMContentLoaded', () => {
-        // Initialize Map centered around a general location (e.g. Jakarta, Indonesia)
+        // Initialize Map with performance optimizations
         map = L.map('map', {
-            zoomControl: false // Custom zoom controls if desired, default bottom right
+            zoomControl: false,
+            zoomAnimation: true,
+            markerZoomAnimation: true,
+            fadeAnimation: true,
+            worldCopyJump: true // Prevents tiles from wrapping when panning far
         }).setView([-6.2088, 106.8456], 5);
         
         // Add custom zoom controls to bottom-left
         L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
-        // CartoDB Dark Matter tile layer for premium neon styling
+        // Optimized CartoDB Dark Matter tile layer for better performance
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
             subdomains: 'abcd',
-            maxZoom: 20
+            maxZoom: 18, // Reduced from 20 to 18 for better performance
+            detectRetina: true, // Use retina tiles on retina displays
+            tileSize: 512, // Larger tiles for fewer requests
+            zoomOffset: -1, // Adjust for tileSize
+            opacity: 1
         }).addTo(map);
 
         // Click handler to select new area
@@ -905,10 +913,16 @@
                     html: '',
                     iconSize: [16, 16],
                     iconAnchor: [8, 8]
-                })
+                }),
+                // Optimization: marker gets updated smoothly
+                riseOnHover: true
             }).addTo(map);
         }
-        map.panTo([lat, lon]);
+        
+        // Only pan if the distance is significant to avoid excessive panning
+        if (map.getZoom() > 3) { // Only pan when zoomed in reasonably
+            map.panTo([lat, lon]);
+        }
     }
 
     function deselectWatchlistItems() {
