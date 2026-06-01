@@ -217,12 +217,21 @@
         .form-control:focus {
             outline: none;
             border-color: var(--accent-color);
-            box-shadow: 0 0 10px rgba(0, 210, 255, 0.2);
-            background: rgba(17, 24, 39, 0.8);
-        }
-
-        {% block extra_css %}{% endblock %}
-    </style>
+             box-shadow: 0 0 10px rgba(0, 210, 255, 0.2);
+             background: rgba(17, 24, 39, 0.8);
+         }
+         
+         /* Messages Notification container */
+         .messages-container {
+             position: fixed;
+             top: 24px;
+             right: 24px;
+             z-index: 10000;
+             margin: 0;
+         }
+         
+         {% block extra_css %}{% endblock %}
+     </style>
 </head>
 <body>
     
