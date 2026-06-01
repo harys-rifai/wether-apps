@@ -637,11 +637,11 @@
                             <div>
                                 <span class="verification-badge">{{ telegram_code }}</span>
                             </div>
-                            {% if telegram_link != "#" %}
-                                <a href="{{ telegram_link }}" target="_blank" class="telegram-btn">
-                                    <i class="fa-brands fa-telegram"></i> Link Bot
-                                </a>
-                            {% else %}
+{% if telegram_link != "#" %}
+    <a href="{{ telegram_link }}" target="_blank" class="telegram-btn">
+        <i class="fa-brands fa-facebook-f"></i> Link Bot
+    </a>
+{% else %}
                                 <p style="margin-top: 8px; font-style: italic; color: #ffab00;">Configure TELEGRAM_BOT_TOKEN in .env to link bot</p>
                             {% endif %}
                         {% endif %}
