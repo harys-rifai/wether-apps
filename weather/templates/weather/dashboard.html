@@ -591,6 +591,20 @@
             <span class="sidebar-title">AI-WEATHER</span>
         </div>
         
+        <!-- Search Bar -->
+        <div class="search-container" style="padding: 16px 24px; border-bottom: 1px solid rgba(0, 210, 255, 0.15);">
+            <div class="search-box">
+                <i class="fa-solid fa-search search-icon" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); font-size: 1rem;"></i>
+                <input type="text" id="location-search" placeholder="Search for a location..." 
+                       style="width: 100%; padding: 10px 12px 10px 36px; border: none; border-radius: 6px; 
+                              background: rgba(255, 255, 255, 0.05); color: white; font-size: 0.9rem;">
+                <div id="search-results" style="position: absolute; top: 100%; left: 0; right: 0; 
+                         background: rgba(17, 24, 39, 0.95); border: 1px solid var(--border-color); 
+                         border-radius: 8px; margin-top: 4px; max-height: 200px; overflow-y: auto; 
+                         z-index: 1001; display: none;"></div>
+            </div>
+        </div>
+        
         <div class="user-profile-section">
             <div class="user-info">
                 <i class="fa-solid fa-user-circle"></i>
@@ -942,7 +956,20 @@
         selectedWatchlistId = null;
     }
 
+    // Weather cache to prevent duplicate API calls
+    const weatherCache = new Map();
+    const CACHE_DURATION = 60 * 1000; // 1 minute
+    
     function fetchWeather(lat, lon, displayName = null) {
+        const cacheKey = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+        const cached = weatherCache.get(cacheKey);
+        
+        // Return cached data if still fresh
+        if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION) {
+            useWeatherData(cached.data, displayName);
+            return;
+        }
+        
         const card = document.getElementById('weather-details-card');
         card.style.display = 'block';
         
@@ -968,28 +995,49 @@
                     return;
                 }
                 
-                document.getElementById('pane-location-name').innerText = displayName || data.name || 'Selected Region';
-                document.getElementById('pane-temp').innerText = `${Math.round(data.main.temp)}°C`;
-                document.getElementById('pane-feels').innerText = `${Math.round(data.main.feels_like)}°C`;
-                document.getElementById('pane-humidity').innerText = `${data.main.humidity}%`;
-                document.getElementById('pane-wind').innerText = `${data.wind.speed} m/s`;
+                // Cache the response
+                weatherCache.set(cacheKey, {
+                    data: data,
+                    timestamp: Date.now()
+                });
                 
-                const weatherCondition = data.weather[0];
-                document.getElementById('pane-desc').innerText = weatherCondition.description;
-                document.getElementById('pane-icon').src = `https://openweathermap.org/img/wn/${weatherCondition.icon}@2x.png`;
-                
-                // Prefill save input with default name if fetching on click
-                if (!displayName) {
-                    document.getElementById('watchlist-name-input').value = data.name || `Region (${lat.toFixed(2)}, ${lon.toFixed(2)})`;
+                // Clean old cache entries periodically
+                if (weatherCache.size > 50) {
+                    // Remove oldest entries
+                    const sorted = Array.from(weatherCache.entries())
+                        .sort((a, b) => a[1].timestamp - b[1].timestamp);
+                    for (let i = 0; i < Math.floor(sorted.length / 2); i++) {
+                        weatherCache.delete(sorted[i][0]);
+                    }
                 }
                 
-                if (data.is_mock) {
-                    document.getElementById('mock-badge').style.display = 'inline-block';
-                }
+                useWeatherData(data, displayName);
             })
             .catch(err => {
                 showToast('error', 'Network error. Failed to retrieve weather.');
             });
+    }
+    
+    // Helper function to use weather data
+    function useWeatherData(data, displayName = null) {
+        document.getElementById('pane-location-name').innerText = displayName || data.name || 'Selected Region';
+        document.getElementById('pane-temp').innerText = `${Math.round(data.main.temp)}°C`;
+        document.getElementById('pane-feels').innerText = `${Math.round(data.main.feels_like)}°C`;
+        document.getElementById('pane-humidity').innerText = `${data.main.humidity}%`;
+        document.getElementById('pane-wind').innerText = `${data.wind.speed} m/s`;
+        
+        const weatherCondition = data.weather[0];
+        document.getElementById('pane-desc').innerText = weatherCondition.description;
+        document.getElementById('pane-icon').src = `https://openweathermap.org/img/wn/${weatherCondition.icon}@2x.png`;
+        
+        // Prefill save input with default name if fetching on click
+        if (!displayName) {
+            document.getElementById('watchlist-name-input').value = data.name || `Region (${parseFloat(data.coord.lat).toFixed(2)}, ${parseFloat(data.coord.lon).toFixed(2)})`;
+        }
+        
+        if (data.is_mock) {
+            document.getElementById('mock-badge').style.display = 'inline-block';
+        }
     }
 
     // Save Location via API
@@ -1236,7 +1284,172 @@
             showToast('error', 'Connection error while checking alerts.');
         });
     }
-
+    
+    // Search functionality
+    let searchTimeout = null;
+    const SEARCH_DELAY = 300; // ms
+    
+    document.getElementById('location-search').addEventListener('input', function(e) {
+        const query = e.target.value.trim();
+        
+        // Clear previous timeout
+        if (searchTimeout) {
+            clearTimeout(searchTimeout);
+        }
+        
+        // If query is empty, hide results
+        if (!query) {
+            document.getElementById('search-results').style.display = 'none';
+            return;
+        }
+        
+        // Set new timeout to prevent excessive API calls
+        searchTimeout = setTimeout(() => {
+            searchLocations(query);
+        }, SEARCH_DELAY);
+    });
+    
+    // Handle Enter key press
+    document.getElementById('location-search').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const query = e.target.value.trim();
+            if (query) {
+                searchLocations(query);
+            }
+        }
+    });
+    
+    function searchLocations(query) {
+        const resultsContainer = document.getElementById('search-results');
+        
+        // Show loading state
+        resultsContainer.innerHTML = '<div style="padding: 8px; color: var(--text-secondary);">Searching...</div>';
+        resultsContainer.style.display = 'block';
+        
+        // Use Nominatim API for geocoding
+        const encodedQuery = encodeURIComponent(query);
+        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodedQuery}&limit=5&addressdetails=1`;
+        
+        fetch(url, {
+            headers: {
+                'User-Agent': 'AI-Weather-App/1.0 (harysrifai@example.com)' // Required by Nominatim usage policy
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            displaySearchResults(data, query);
+        })
+        .catch(error => {
+            resultsContainer.innerHTML = '<div style="padding: 8px; color: var(--danger-color);">Search error. Please try again.</div>';
+            console.error('Search error:', error);
+        });
+    }
+    
+    function displaySearchResults(results, query) {
+        const resultsContainer = document.getElementById('search-results');
+        
+        if (results.length === 0) {
+            resultsContainer.innerHTML = '<div style="padding: 8px; color: var(--text-secondary);">No results found</div>';
+            return;
+        }
+        
+        resultsContainer.innerHTML = ''; // Clear previous results
+        
+        results.forEach(place => {
+            const resultDiv = document.createElement('div');
+            resultDiv.style.padding = '12px';
+            resultDiv.style.borderBottom = '1px solid rgba(255, 255, 255, 0.05)';
+            resultDiv.style.cursor = 'pointer';
+            resultDiv.style.display = 'flex';
+            resultDiv.style.justifyContent = 'space-between';
+            resultDiv.style.alignItems = 'center';
+            
+            // Add hover effect
+            resultDiv.onmouseover = function() {
+                this.style.backgroundColor = 'rgba(0, 210, 255, 0.1)';
+            };
+            resultDiv.onmouseout = function() {
+                this.style.backgroundColor = 'transparent';
+            };
+            
+            // Click handler
+            resultDiv.onclick = function() {
+                // Hide search results
+                resultsContainer.style.display = 'none';
+                // Clear search input
+                document.getElementById('location-search').value = '';
+                // Set marker and fetch weather
+                setMarker(parseFloat(place.lat), parseFloat(place.lon));
+                fetchWeather(parseFloat(place.lat), parseFloat(place.lon), place.display_name);
+                // Center map on result
+                map.setView([parseFloat(place.lat), parseFloat(place.lon)], 10);
+                // Deselect watchlist items
+                deselectWatchlistItems();
+                document.getElementById('alert-rules-card').style.display = 'none';
+            };
+            
+            // Left side - place info
+            const infoDiv = document.createElement('div');
+            infoDiv.style.flex = '1';
+            infoDiv.style.minWidth = '0';
+            
+            const nameDiv = document.createElement('div');
+            nameDiv.style.fontWeight = '600';
+            nameDiv.style.fontSize = '0.9rem';
+            nameDiv.style.color = 'white';
+            nameDiv.style.overflow = 'hidden';
+            nameDiv.style.textOverflow = 'ellipsis';
+            nameDiv.style.whiteSpace = 'nowrap';
+            nameDiv.textContent = place.display_name.split(',')[0]; // Just first part of address
+            
+            const detailsDiv = document.createElement('div');
+            detailsDiv.style.fontSize = '0.75rem';
+            detailsDiv.style.color = 'var(--text-secondary)';
+            detailsDiv.style.marginTop = '2px';
+            detailsDiv.style.overflow = 'hidden';
+            detailsDiv.style.textOverflow = 'ellipsis';
+            detailsDiv.style.whiteSpace = 'nowrap';
+            
+            // Show relevant address parts
+            const addressParts = place.display_name.split(',');
+            if (addressParts.length > 1) {
+                detailsDiv.textContent = addressParts.slice(1, 3).join(', '); // Show next 2 parts
+            } else {
+                detailsDiv.textContent = place.display_name;
+            }
+            
+            infoDiv.appendChild(nameDiv);
+            infoDiv.appendChild(detailsDiv);
+            
+            // Right side - coordinates
+            const coordsDiv = document.createElement('div');
+            coordsDiv.style.fontSize = '0.75rem';
+            coordsDiv.style.color = 'var(--accent-color)';
+            coordsDiv.style.textAlign = 'right';
+            coordsDiv.textContent = `${parseFloat(place.lat).toFixed(4)}, ${parseFloat(place.lon).toFixed(4)}`;
+            
+            resultDiv.appendChild(infoDiv);
+            resultDiv.appendChild(coordsDiv);
+            
+            resultsContainer.appendChild(resultDiv);
+        });
+        
+        // Remove bottom border from last item
+        const lastItem = resultsContainer.lastElementChild;
+        if (lastItem) {
+            lastItem.style.borderBottom = 'none';
+        }
+    }
+    
+    // Close search results when clicking outside
+    document.addEventListener('click', function(e) {
+        const searchContainer = document.querySelector('.search-container');
+        if (!searchContainer.contains(e.target)) {
+            document.getElementById('search-results').style.display = 'none';
+        }
+    });
+    
     // Toast utility helper
     function showToast(type, text) {
         const container = document.getElementById('toast-container');

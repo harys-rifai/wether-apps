@@ -17,6 +17,8 @@ def dashboard(request):
     verif_code = profile.generate_verification_code()
     
     bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+    # Debug: Print the bot token value to see if it's being read correctly
+    print(f"DEBUG: TELEGRAM_BOT_TOKEN = {repr(bot_token)}")
     bot_username = "AI_Weather_Alert_Bot" # Default or customizable
     
     # We can fetch bot username from telegram bot API, but default is fine.
