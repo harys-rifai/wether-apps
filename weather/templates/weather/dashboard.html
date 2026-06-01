@@ -889,16 +889,27 @@
         });
     }
 
+    // Debounce variables for map click
+    let mapClickTimeout = null;
+    const MAP_CLICK_DELAY = 150; // ms
+    
     function onMapClick(e) {
-        const lat = e.latlng.lat;
-        const lon = e.latlng.lng;
+        // Debounce map clicks to prevent excessive updates
+        if (mapClickTimeout) {
+            clearTimeout(mapClickTimeout);
+        }
         
-        setMarker(lat, lon);
-        fetchWeather(lat, lon);
-        
-        // De-select watchlist item since we clicked manually
-        deselectWatchlistItems();
-        document.getElementById('alert-rules-card').style.display = 'none';
+        mapClickTimeout = setTimeout(() => {
+            const lat = e.latlng.lat;
+            const lon = e.latlng.lng;
+            
+            setMarker(lat, lon);
+            fetchWeather(lat, lon);
+            
+            // De-select watchlist item since we clicked manually
+            deselectWatchlistItems();
+            document.getElementById('alert-rules-card').style.display = 'none';
+        }, MAP_CLICK_DELAY);
     }
 
     function setMarker(lat, lon) {
@@ -1075,7 +1086,19 @@
         
         selectedWatchlistId = id;
         setMarker(lat, lon);
-        map.setView([lat, lon], 10);
+        
+        // Only set view if we're not already close to this location
+        const currentCenter = map.getCenter();
+        const distance = latLngToDistance(currentCenter.lat, currentCenter.lng, lat, lon);
+        
+        // Only animate if we're more than 0.1 degrees away (roughly 11km)
+        if (distance > 0.1) {
+            map.setView([lat, lon], 10);
+        } else {
+            // Just pan smoothly if close
+            map.panTo([lat, lon]);
+        }
+        
         fetchWeather(lat, lon, name);
         
         // Load Rules Card
@@ -1102,6 +1125,11 @@
         document.getElementById('wind-high-threshold-box').style.pointerEvents = rules.alert_on_wind_high ? 'auto' : 'none';
         
         document.getElementById('rule-storm').checked = rules.alert_on_storm;
+    }
+    
+    // Helper function to calculate approximate distance between two lat/lng points
+    function latLngToDistance(lat1, lng1, lat2, lng2) {
+        return Math.sqrt(Math.pow(lat2 - lat1, 2) + Math.pow(lng2 - lng1, 2));
     }
 
     // Save Alert Rules via API
